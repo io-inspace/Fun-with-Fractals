@@ -1,0 +1,127 @@
+%using Palmer to build some landscapes with one abiotic gradient.
+
+%components:
+%spatially explicit landscape 
+%modifiable parameters: a, b, n
+
+%for D = 2 use g(x,y) = ax + by where a and b are pulled from a normal
+%distribution between -1 and 1:
+
+min = -.5;
+max = .5;
+x = (min:.001:max);
+u = mean(x);
+v = var(x);
+a = u + v*randn(1,1);
+b = u + v*randn(1,1);
+%make sure your a and b values are between -1 and 1!  Figure out how to
+%write something to throw up a warning if not.  For now to keep everything
+%standard use fixed a & b:
+
+a = .5;
+b = .2;
+
+%now that we've set a & b apply them to a matrix g(x,y).
+%to figure out spatial autocorrelation according to Saupe 1988 you need a
+%landscape 2^n+1 cells to a side:
+n = 3; %modify this to increase or decrease the size of the landscape
+dim = 2^n + 1;
+rows = dim; %number of row positions
+cols = dim; %number of column positions
+g2 = zeros(rows,cols); %g2 is a matrix with D = 2
+
+%then write the for loop:
+for pos1 = 1:rows;
+    for pos2 = 1:cols;
+    g2(pos1,pos2) = a*(pos1) + b*(pos2);
+    end
+end
+
+%for D = 3 it's just a 20x20 position matrix filled in with numbers pulled
+%from a Gaussian distribution:
+g3 = randn(dim); %g3 is a matrix with D = 3.
+%need a way to "set seed" but it doesn't seem to want to work.
+
+%for intermediate D = 2.25, D = 2.5, & D = 2.75 use the midpoint
+%displacement method: see step 1 etc.
+%D = 2.25
+
+%1. assign random numbers to the four corners of the matrix:
+gint = zeros(rows,cols);
+gint(1,1) = randn(1);
+gint(rows,1) = randn(1);
+gint(1,cols) = randn(1);
+gint(rows,cols) = randn(1);
+%again need a way to SET SEED
+
+%midpoint 1: the first level midpoints can be defined by 2^(n-1)+1; where
+%level = 1
+mp1 = (1 + dim)/2;
+%outline:
+gint(1,mp1) = randn(1);
+gint(mp1,1) = randn(1);
+gint(rows,mp1) = randn(1);
+gint(mp1,cols) = randn(1);
+%center:
+gint(mp1(1,1),mp1(1,1)) = randn(1);
+
+%midpoint 2: the second level midpoints can be defined by 2^(n-2)+1 and
+%(mp1 + dim)/2 where level = 2
+mp2 = (1 + mp1)/2;
+mp22 = (mp1 + dim)/2;
+%outline:
+gint(1,mp2) = randn(1);
+gint(1,mp22) = randn(1);
+gint(mp2,cols) = randn(1);
+gint(mp22,cols) = randn(1);
+gint(rows,mp2) = randn(1);
+gint(rows,mp22) = randn(1);
+gint(mp2,1) = randn(1);
+gint(mp22,1) = randn(1);
+gint(mp1,mp2) = randn(1);
+gint(mp1,mp22) = randn(1);
+gint(mp2,mp1) = randn(1);
+gint(mp22,mp1) = randn(1);
+
+%center
+gint(mp2,mp2) = randn(1);
+gint(mp2,mp22) = randn(1);
+gint(mp22,mp2) = randn(1);
+gint(mp22,mp22) = randn(1);
+
+%midpoint 3: 
+mp3 = (1 + mp2)/2;
+mp33 = (mp2 + mp1)/2;
+mp333 = (mp1 + mp22)/2;
+mp3333 = (mp22 + dim)/2;
+
+%outline:
+
+
+
+%ok what if all the midpoints went into an n x(even iterations) matrix.  For
+%example, a 6 level landscape would have rows 1,2,4,8,16,32,64.
+%then you could pull the appropriate mp values at the appropriate levels
+%and feed them into a loop to do what you're doing by hand above.
+
+levels = 3;
+points = 2^levels;
+mp = zeros(levels,points);
+initialmp = (1 + dim)/2;
+mp(1,1) = initialmp;
+for levels = 2;
+    for points = 1:2;
+    mp(levels,points) = (1 + mp((levels-1),points))/2;
+    end
+end
+for levels = 2;
+    for points = 1:2
+    mp(levels,points) = 
+        
+    if mp(levels,points) < 2
+       mp(levels,points) == 0
+    else 
+       mp(levels,points) == (1 + mp((levels-1),points))/2
+    end
+    end
+end
