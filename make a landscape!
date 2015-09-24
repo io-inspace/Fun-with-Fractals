@@ -19,12 +19,7 @@ landscape(1+inset,cols-inset) = 2;
 landscape(rows-inset,1+inset) = 4;
 landscape(rows-inset,cols-inset) = 5;
 
-%TO DO: start the counter here, and define f via the counter: 
-%z = 1:maxlevel ... -1?  and f = 2^(maxlevel-z)
-
-%define a temporary f since you don't want loops yet
-
-%run your diagonals to get your center, etc.
+%the big loop
 
 for z = 1:maxlevel;
     f = 2^(maxlevel-z);
