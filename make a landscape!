@@ -118,6 +118,6 @@ landscape = flipud(landscape);
 index = z;
 end
 
-%trim
+%trim off the borders
 
 landscape = landscape(1+inset:rows-inset,1+inset:cols-inset);
