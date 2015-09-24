@@ -1,0 +1,128 @@
+%run this to start your landscape
+
+%basic landscape parameters:
+
+dim = 17; %choose array size via (2^maxlevel/2)
+k = dim-1; %k is the number of diagonals in the matrix
+maxlevel = log(dim-1)/log(2);
+border = (2^maxlevel); %borders will allow the midpoint averages to calculate
+inset = (2^maxlevel)/2; %insetting builds the matrix within the borders, these need to be removed at the end
+rows = dim+border; %matrix + border
+cols = dim+border; %matrix + border
+
+landscape = zeros(rows,cols); 
+
+%TO DO: there's a prescribed way to set the four corners:
+
+landscape(1+inset,1+inset) = 1;
+landscape(1+inset,cols-inset) = 2;
+landscape(rows-inset,1+inset) = 4;
+landscape(rows-inset,cols-inset) = 5;
+
+%TO DO: start the counter here, and define f via the counter: 
+%z = 1:maxlevel ... -1?  and f = 2^(maxlevel-z)
+
+%define a temporary f since you don't want loops yet
+
+%run your diagonals to get your center, etc.
+
+for z = 1:maxlevel;
+    f = 2^(maxlevel-z);
+main = diag(landscape,0);
+points = find(main);
+  for y = 1:length(points)-1;
+    mp = (points(y)+points(y+1))/2;
+    davg = (landscape(mp-f,mp-f)+landscape(mp-f,mp+f)+landscape(mp+f,mp-f)+landscape(mp+f,mp+f))/4;
+    main(mp) = davg;
+  end
+matrix = diag(main,0);
+
+%UPPER TRIANGLE
+
+  for x = 1:k;
+    if any(diag(landscape,x)) == 1; %check to see if there are nonzero elements in the diagonal.
+       diagonal = diag(landscape,x);
+       points = find(diagonal);
+    for y = 1:length(points)-1;
+       mp = (points(y)+points(y+1))/2;
+       ump = mp + x;
+       davg = (landscape(mp-f,ump-f)+landscape(mp+f,ump-f)+landscape(mp-f,ump+f)+landscape(mp+f,ump+f))/4;
+       diagonal(mp) = davg;
+    end 
+    matrix = matrix + diag(diagonal,x);
+    else
+        diagonal = diag(landscape,x);
+        matrix = matrix + diag(diagonal,x);
+    end
+  end
+
+%LOWER TRIANGLE
+
+  for x = 1:k;
+    if any(diag(landscape,-x)) == 1;
+       diagonal = diag(landscape,-x);
+       points = find(diagonal);
+    for y = 1:length(points)-1;
+       mp = (points(y)+points(y+1))/2;
+       lmp = mp + x;
+       davg = (landscape(lmp-f,mp-f)+landscape(lmp+f,mp-f)+landscape(lmp+f,mp+f)+landscape(lmp-f,mp+f))/4;
+       diagonal(mp) = davg;
+    end 
+    matrix = matrix + diag(diagonal,-x);
+    else
+        diagonal = diag(landscape,-x);
+        matrix = matrix + diag(diagonal,-x);
+    end
+  end
+
+landscape = matrix;
+
+%off diagonals
+
+for x = 1:length(landscape);
+    points = find(landscape(x,:));
+    for y = 1:length(points)-1;
+    mp = (points(y)+points(y+1))/2;
+    if landscape(x-f,mp) == 0 || landscape(x,mp+f) == 0 || landscape(x+f,mp) == 0 || landscape(x,mp-f)==0;
+    eavg = (landscape(x-f,mp)+landscape(x,mp+f)+landscape(x+f,mp)+landscape(x,mp-f))/3;
+    else
+    eavg = (landscape(x-f,mp)+landscape(x,mp+f)+landscape(x+f,mp)+landscape(x,mp-f))/4;
+    end
+    landscape(x,mp) = eavg;
+    end
+end
+
+landscape = transpose(landscape);
+
+points = find(landscape(1+inset,:));
+for y = 1:length(points)-1;
+    mp = (points(y)+points(y+1))/2;
+    if landscape(x-f,mp) == 0 || landscape(x,mp+f) == 0 || landscape(x+f,mp) == 0 || landscape(x,mp-f)==0;
+    eavg = (landscape(1+inset-f,mp)+landscape(1+inset,mp+f)+landscape(1+inset+f,mp)+landscape(1+inset,mp-f))/3;
+    else
+    eavg = (landscape(1+inset-f,mp)+landscape(1+inset,mp+f)+landscape(1+inset+f,mp)+landscape(1+inset,mp-f))/4;
+    end
+    landscape(1+inset,mp) = eavg;
+end
+
+landscape = flipud(landscape);
+
+points = find(landscape(1+inset,:));
+for y = 1:length(points)-1;
+    mp = (points(y)+points(y+1))/2;
+    if landscape(x-f,mp) == 0 || landscape(x,mp+f) == 0 || landscape(x+f,mp) == 0 || landscape(x,mp-f)==0;
+    eavg = (landscape(1+inset-f,mp)+landscape(1+inset,mp+f)+landscape(1+inset+f,mp)+landscape(1+inset,mp-f))/3;
+    else
+    eavg = (landscape(1+inset-f,mp)+landscape(1+inset,mp+f)+landscape(1+inset+f,mp)+landscape(1+inset,mp-f))/4;
+    end
+    landscape(1+inset,mp) = eavg;
+end
+
+landscape = flipud(landscape);
+
+index = z;
+end
+
+%trim
+
+landscape = landscape(1+inset:rows-inset,1+inset:cols-inset);
