@@ -1,0 +1,136 @@
+%create landscapes
+
+%basic LANDSCAPE PARAMETERS:
+
+%pick a FRACTAL DIMENSION D 2:3, Palmer 1992 does 2, 2.25, 2.5, 2.75, 3.
+
+D = 3;
+H = 3 - D; %H ranges between 0 and 1 and = 3-D from Palmer 1992, referred to as the scaling factor.
+
+%pick an ENVSTD 0:2.5, Palmer 1992 does 0, .5, 1, 1.5, 2, 2.5.
+sigma = 2.5; 
+
+dim = 257; %choose array size via (2^maxlevel+1)
+k = dim-1; %k is the number of diagonals in the matrix
+maxlevel = log(dim-1)/log(2); %defined by dim
+border = (2^maxlevel); %borders will allow the midpoint averages to calculate
+inset = (2^maxlevel)/2; %insetting builds the matrix within the borders, these need to be removed at the end
+rows = dim+border; %matrix + border = inset on all four sides
+cols = dim+border; %matrix + border = inset on all four sides
+
+landscape = zeros(rows,cols); 
+
+%to SET THE FOUR CORNERS pull from a distribution with mean 0 and sigma^2 
+
+initsigma = sigma*randn(1,4); %the initial SD is our initial ENVSTD.
+
+landscape(1+inset,1+inset) = initsigma(1);
+landscape(1+inset,cols-inset) = initsigma(2);
+landscape(rows-inset,1+inset) = initsigma(3);
+landscape(rows-inset,cols-inset) = initsigma(4);
+
+%the big loop
+
+for n = 1:maxlevel; %repeat this loop for each level.
+    f = 2^(maxlevel-n); %define the distance to neighbors, which is a function of level.
+    delta = sigma/(2^(n*H))*sqrt((1-2^(2*(H-2)))); %this is the new SD for each level.
+    
+%DIAGONALS
+
+%MAIN
+
+main = diag(landscape,0);
+points = find(main);
+  for y = 1:length(points)-1;
+    mp = (points(y)+points(y+1))/2;
+    davg = (landscape(mp-f,mp-f)+landscape(mp-f,mp+f)+landscape(mp+f,mp-f)+landscape(mp+f,mp+f))/4;
+    main(mp) = davg + delta*randn;
+  end
+matrix = diag(main,0);
+
+%UPPER TRIANGLE
+
+  for x = 1:k;
+    if any(diag(landscape,x)) == 1; %check to see if there are nonzero elements in the diagonal.
+       diagonal = diag(landscape,x);
+       points = find(diagonal);
+    for y = 1:length(points)-1;
+       mp = (points(y)+points(y+1))/2;
+       ump = mp + x;
+       davg = (landscape(mp-f,ump-f)+landscape(mp+f,ump-f)+landscape(mp-f,ump+f)+landscape(mp+f,ump+f))/4;
+       diagonal(mp) = davg + delta*randn;
+    end 
+    matrix = matrix + diag(diagonal,x);
+    else
+        diagonal = diag(landscape,x);
+        matrix = matrix + diag(diagonal,x);
+    end
+  end
+
+%LOWER TRIANGLE
+
+  for x = 1:k;
+    if any(diag(landscape,-x)) == 1;
+       diagonal = diag(landscape,-x);
+       points = find(diagonal);
+    for y = 1:length(points)-1;
+       mp = (points(y)+points(y+1))/2;
+       lmp = mp + x;
+       davg = (landscape(lmp-f,mp-f)+landscape(lmp+f,mp-f)+landscape(lmp+f,mp+f)+landscape(lmp-f,mp+f))/4;
+       diagonal(mp) = davg + delta*randn;
+    end 
+    matrix = matrix + diag(diagonal,-x);
+    else
+        diagonal = diag(landscape,-x);
+        matrix = matrix + diag(diagonal,-x);
+    end
+  end
+
+landscape = matrix;
+
+%OFF DIAGONALS
+
+for x = 1:length(landscape);
+    points = find(landscape(x,:));
+    for y = 1:length(points)-1;
+    mp = (points(y)+points(y+1))/2;
+    if landscape(x-f,mp) == 0 || landscape(x,mp+f) == 0 || landscape(x+f,mp) == 0 || landscape(x,mp-f)==0;
+    eavg = (landscape(x-f,mp)+landscape(x,mp+f)+landscape(x+f,mp)+landscape(x,mp-f))/3;
+    else
+    eavg = (landscape(x-f,mp)+landscape(x,mp+f)+landscape(x+f,mp)+landscape(x,mp-f))/4;
+    end
+    landscape(x,mp) = eavg + delta*randn;
+    end
+end
+
+landscape = transpose(landscape);
+
+points = find(landscape(1+inset,:)); %YOU DON'T NEED THE IF/ELSE HERE!!!!
+for y = 1:length(points)-1;
+    mp = (points(y)+points(y+1))/2;
+    eavg = (landscape(1+inset-f,mp)+landscape(1+inset,mp+f)+landscape(1+inset+f,mp)+landscape(1+inset,mp-f))/3;
+    landscape(1+inset,mp) = eavg + delta*randn;
+end
+
+landscape = flipud(landscape);
+
+points = find(landscape(1+inset,:));
+for y = 1:length(points)-1;
+    mp = (points(y)+points(y+1))/2;
+    eavg = (landscape(1+inset-f,mp)+landscape(1+inset,mp+f)+landscape(1+inset+f,mp)+landscape(1+inset,mp-f))/3;
+    landscape(1+inset,mp) = eavg + delta*randn;
+end
+
+landscape = flipud(landscape);
+
+index = n;
+end
+
+%trim off the borders
+
+landscape = landscape(1+inset:rows-inset,1+inset:cols-inset);
+
+%CONVERT to grayscale:
+
+I = mat2gray(landscape);
+imshow(I)
