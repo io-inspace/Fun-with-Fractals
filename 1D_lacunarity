@@ -1,0 +1,36 @@
+%experimenting with the big loop
+
+%choose a set from sets you want to measure:
+N = N1;
+
+Lsets = zeros(1,maxpos);
+for r = 1:maxpos
+   boxes = maxpos-r+1;
+   s = zeros(1,boxes);
+    for index1 = 1:boxes; 
+      if index1 == 1;
+        s(1,index1) = sum(N(1,index1:r));
+      else
+        s(1,index1) = sum(N(1,index1:(r+index1-1)));
+      end
+    end
+    
+freq = hist(s,unique(s));
+prob = freq/boxes;
+
+Z1 = unique(s)*prob';
+Z2 = unique(s).^2*prob';
+
+L = Z2/Z1^2;
+
+Lsets(1,r) = L;
+end
+
+%make a log-log plot of Lsets and r:
+
+figure(1)
+plot(log(1:maxpos),log(Lsets),'k-','LineWidth',2)
+hold on
+legend('clumped','random','regular','random clumps','block')
+
+%next up: scale up to 2D.
