@@ -1,0 +1,64 @@
+%measure lacunarity via the gliding box algorithm (Plotnick 1996)
+%BINARY data
+
+%make four sets:
+%1. clustered
+%2. random
+%3. regular
+%4. random clumps
+
+maxpos = 300;
+
+%1. clustered
+a = 1;
+b = maxpos/2;
+clumps = (b-a).*rand(2,1) + a;
+
+N1 = zeros(1,maxpos);
+
+for pos = 1:maxpos;
+    if pos < floor(clumps(1));
+    N1(1,pos) = 1;
+    elseif pos > maxpos - floor(clumps(2));
+    N1(1,pos) = 1;
+    else
+    N1(1,pos) = 0;
+    end
+end
+
+%2. random
+
+data = [0 1];
+N2 = datasample(data,maxpos);
+
+%3. regular
+
+N3 = zeros(1,maxpos);
+
+for pos = 1:maxpos
+    rem = mod(pos,2);
+    if rem == 1
+    N3(1,pos) = 0;
+    else
+    N3(1,pos) = 1;
+    end
+end
+
+%4. random clumps
+
+randomclumps = sort(unique((randi([1 maxpos],1,floor(maxpos/10)))));
+
+N4(1,1:randomclumps(1)) = 0;
+
+for rc = 2:length(randomclumps)-1
+if mod(rc,2) == 1;
+   N4(1,randomclumps(rc-1):randomclumps(rc)) = 1;
+else
+   N4(1,randomclumps(rc-1):randomclumps(rc)) = 0;
+end
+end
+
+N4(1,randomclumps(length(randomclumps)):maxpos) = 0;
+
+N5 = ones(1,maxpos);
+
