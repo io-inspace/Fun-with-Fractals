@@ -15,7 +15,7 @@ for r = 1:maxpos
       end
     end
     
-freq = hist(s,unique(s));
+freq = hist(s,length(unique(s)));
 prob = freq/boxes;
 
 Z1 = unique(s)*prob';
