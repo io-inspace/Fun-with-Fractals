@@ -1,0 +1,73 @@
+%RUN final_landscapes_2016.m
+
+%MODIFIED: used distances only with >30 pairs of points, and distances which were
+%less than half the maximum distance.
+
+%THIS VERSION IS MUCH WORSE AT ESTIMATING D...
+
+%code takes a landscape and calculates the distances between all points and
+%the semivariance at all distances.  log(semivariance)~log(distance) is
+%plotted as a semivariogram.  The slope of that semivariogram is an
+%estimate of fractal dimension D.  Equation and methods are from Burroughs
+%1983.
+
+%modified/annotated 6-5-2016
+
+entries = (dim^2)-1; %entries minus the first one
+output = sum(1:1:entries); %this is the number of values you'll get depending on the size of the landscape
+
+h = zeros(1,output); %the vector for distances
+sqrs = zeros(1,output); %the vector for (z2-z1)^2
+
+for e = 1:entries
+    %get the x,y coordinates of the current point:
+            [normedsd(e),e];
+            [x,y]=ind2sub(size(normedsd),e);
+    if(e == 1);
+        for next = (e+1):(dim^2)
+            %get the coordinates of the other point
+            [normedsd(next),next]; 
+            [a,b]=ind2sub(size(normedsd),next);
+            h(1,(next-e)) = sqrt(((x-a)^2)+((y-b)^2)); %Euclidean distance
+            sqrs(1,(next-e)) = (normedsd(next)-normedsd(e))^2; %the difference between the two points, squared
+        end
+        add = (dim^2)-e; %this is a recursive indexing variable that gets larger in order to place all
+                         %calculations into one vector.
+    else
+        for next = (e+1):(dim^2) %repeat for all other e
+            [normedsd(next),next]; 
+            [a,b]=ind2sub(size(normedsd),next);
+            h(1,(next-e+add)) = sqrt(((x-a)^2)+((y-b)^2));
+            sqrs(1,(next-e+add)) = (normedsd(next)-normedsd(e))^2;
+        end
+        add = next-e+add; %the same recursive indexing variable.
+    end
+end
+
+%get the semivariogram:
+uniq = unique(h); %all the unique distances 
+uniq = uniq(find(uniq<(max(h)/2))); %use only those h < D/2
+semivar = zeros(1,length(uniq));
+for u = 1:length(uniq)
+    f = find(h == uniq(u));%find the position of all the entries equal to that particular distance
+    if length(f) > 30; %this is one of the criteria for calculating a useful semivariogram via 
+    spec.sqrs = zeros(1,length(f));
+    for v = 1:length(f)
+        spec.sqrs(1,v) = sqrs(f(v)); %pull all the sqrs values that correspond to that distance
+    end
+    semivar(1,u) = (1/(2*length(f)))*sum(spec.sqrs); %calculate the semivariance via eq. (3) in Burroughs, but
+                                                     %check the denominator, I think this is OK though. 
+    else
+        semivar(1,u) = NaN; %put NaN in for non-useful entries as a placeholder.
+    end
+end
+
+%now you have to remove the NaN values from both vectors before plotting.
+uniq(find(isnan(semivar)))
+%get the slope:
+slope = regress(log(semivar'),[log(uniq') ones(size(uniq'))]);
+
+figure(5)
+plot(log(uniq'),log(semivar'))
+
+K_D = 3-(slope(1)/2)
