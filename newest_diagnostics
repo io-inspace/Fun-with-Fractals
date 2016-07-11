@@ -1,0 +1,288 @@
+%code produces a landscape of one abiotic factor with mean = 0, and a specified size, SD,
+%and D using a midpoint displacement method with random successive additions following methods 
+%laid out in Palmer 1992 and Saupe 1989.
+
+%ISSUES: 
+
+%Random additions are done by finding non-zero entries, but this
+%will miss entries = 0.  Entries = 0 is highly unlikely, but still I should
+%figure out a way to do this at some point.
+
+%corners come out with a funny look, I should consider keeping them
+%constant
+
+%Greyscale image adjusts depending on the variation and the SD, so it's not
+%really accurate
+
+%estimation of D is still off, and the SD among multiple landscapes is usually
+%>.1, which means it's really no good at distinguishing the estimated D OR
+%for distinguishing between Ds of different landscapes.
+
+%updated/fully annotated 7-11-2016
+
+%how many landscapes do you want?
+iterations = 10;
+
+%what kind of data do you want from each landscape?
+
+%Standard Deviation:
+SD = zeros(1,iterations); %puts the SD from each iteration into a vector
+%D:
+fractalD = zeros(1,iterations); %puts the D from each iteration into a vector
+%lacunarity:
+L = zeros(1,iterations); %puts the lacunarity from each iteration into a vector, TBD
+
+%save the landscapes generated for analysis using the R package:
+landscapes = zeros
+
+%THE BIG LOOP = 1 complete landscape per iteration:
+
+for z = 1:iterations;
+    
+%PARAMETERS
+
+%landscape type:
+
+D = 2.1; %set the fractal dimension D; can range from >2 to 3.  For D = 2 see final_landscapes_2016_D2.m
+H = 3 - D; %H, the scaling factor, ranges between >0 and 1.
+sigma = .5; %set the standard deviation SD; Palmer maxes out at 2.5
+
+%landscape size:
+
+dimension = 33; %choose array size (2^maxlevel+1).  
+%NOTE: anything larger than 65 won't run if you try to calculate D.
+dim = dimension;
+k = dim - 1; %k is the number of diagonals in the matrix
+
+%how many steps are needed to fill it all in?
+maxlevel = log(dimension-1)/log(2); 
+
+%landscape border:
+border = (2^maxlevel); %borders will allow the midpoint averages to calculate
+inset = (2^maxlevel)/2; %insetting builds the matrix within the borders, these will be removed at the end
+rows = dim + border; %matrix + border = inset on all four sides
+cols = dim + border; %matrix + border = inset on all four sides
+
+%the landscape:
+landscape = zeros(rows,cols);
+
+%CORNERS:
+%corners (1,1) and (last,last) are the intermediate values, while corners
+%(1,last) and (last,1) are the extreme values: [1 4 2 3]
+
+delta = sigma; %this is the first delta: the original sigma
+corners = sort(delta*randn(1,4));%this is to get close to a pretty gradient look
+
+landscape(rows-inset,1+inset) = corners(1); %corner (last,1)
+landscape(1+inset,cols-inset) = corners(4); %corner (1,last)
+landscape(1+inset,1+inset) = corners(2); %corner (1,1)
+landscape(rows-inset,cols-inset) = corners(3); %corner (last,last)
+       
+%LANDSCAPE LOOP: 
+
+for n = 1:maxlevel; %repeat for each level.
+    f = 2^(maxlevel-n); %define the distance to (not points between) neighbors, which is a function of level.
+    
+    %TO TURN OFF SUCCESSIVE ADDITIONS:
+    sa = 1;
+    %TO TURN OFF NORMALIZATION:
+    norm = 1;
+    
+    %start with the DIAGONALS
+    
+%MAIN
+    
+    %first, do the rotation delta:
+    if D == 2;
+        delta=0;
+    else
+    delta = delta*(.5)^(.5*H);
+    end
+    
+    main = diag(landscape,0); %pull out the main diagonal and call it main
+    points = find(main); %find the non-zeros: these are the numbers we need to calculate the midpoints (mps)
+  for y = 1:length(points)-1; %determine how many mps are needed
+    mp = (points(y)+points(y+1))/2; %mp is a location, not a number
+    davg = (landscape(mp-f,mp-f)+landscape(mp-f,mp+f)+landscape(mp+f,mp-f)+landscape(mp+f,mp+f))/4; %davg are numbers from the 
+                                                                                                    %landscape matrix
+    main(mp) = davg + delta*randn; %this is the final entry: the average of the surrounding points + some wiggle
+  end
+matrix = diag(main,0); %stick this back into a temporary matrix called matrix, specifically for the diagonals of landscape.
+
+%UPPER TRIANGLE 
+    
+  for x = 1:k; %go diagonal by diagonal
+    if any(diag(landscape,x)) == 1; %check to see if there are nonzero elements in the diagonal.
+       diagonal = diag(landscape,x); %if there are, pull it out
+       points = find(diagonal); %now follow the same process as for the main diagonal
+    for y = 1:length(points)-1;
+       mp = (points(y)+points(y+1))/2;
+       ump = mp + x; %this is to account for the fact that we're in the upper triangle, so the distance to neighbors f needs 
+                     %to be modified by an amount mp + x.  For example, in a 5x5 matrix landscape(mp-f,ump-f) is (1,3), which
+                     %puts us in the upper triangle for the top left point of the box, whereas without ump we'd get (1,1)
+       davg = (landscape(mp-f,ump-f)+landscape(mp+f,ump-f)+landscape(mp-f,ump+f)+landscape(mp+f,ump+f))/4;
+       diagonal(mp) = davg + delta*randn;
+    end 
+    matrix = matrix + diag(diagonal,x); %put the diagonal into matrix with the main
+    else %skip those diagonals that are currently empty
+        diagonal = diag(landscape,x);
+    matrix = matrix + diag(diagonal,x);
+    end
+  end
+  
+%LOWER TRIANGLE
+%repeat the same process as the upper triangle
+    
+  for x = 1:k;
+    if any(diag(landscape,-x)) == 1;
+       diagonal = diag(landscape,-x);
+       points = find(diagonal);
+    for y = 1:length(points)-1;
+       mp = (points(y)+points(y+1))/2;
+       lmp = mp + x; %equivalent to ump but for the lower triangle.
+       davg = (landscape(lmp-f,mp-f)+landscape(lmp+f,mp-f)+landscape(lmp+f,mp+f)+landscape(lmp-f,mp+f))/4;
+       diagonal(mp) = davg + delta*randn;
+    end 
+    matrix = matrix + diag(diagonal,-x);
+    else
+        diagonal = diag(landscape,-x);
+    matrix = matrix + diag(diagonal,-x);
+    end
+  end
+
+landscape = matrix; %rename the newly constructed matrix of diagonals and proceed.
+
+%do random additions:
+if sa == 1;
+for i = 1:length(find(landscape));%this goes through each non-zero entry
+    totpnts = find(landscape);%pull out the non-zeros
+    landscape(totpnts(i)) = landscape(totpnts(i))+delta*randn;%and add some wiggle to each of them
+end
+end
+
+%OFF DIAGONALS
+   
+   %define a new delta to account for this rotation
+    delta = delta*(.5)^(H/2);
+    
+    for x = 1:length(landscape); %go by row instead of by diagonal
+    points = find(landscape(x,:));
+    for y = 1:length(points)-1; %get the number of midpoints.
+    mp = (points(y)+points(y+1))/2; %define where the midpoints are.
+    if x == (inset+1) || x == (inset+dim) %these x are edges, so divide by 3
+    eavg = (landscape(x-f,mp)+landscape(x,mp+f)+landscape(x+f,mp)+landscape(x,mp-f))/3;
+    else %these x are not, so divide by 4
+    eavg = (landscape(x-f,mp)+landscape(x,mp+f)+landscape(x+f,mp)+landscape(x,mp-f))/4;
+    end
+    
+    landscape(x,mp) = eavg + delta*randn;
+    end
+    end
+
+%the previous step gets every entry except for the first and last column
+landscape = transpose(landscape); %turn and do the first column (now row)
+
+points = find(landscape(1+inset,:)); 
+for y = 1:length(points)-1;
+    mp = (points(y)+points(y+1))/2;
+    eavg = (landscape(1+inset-f,mp)+landscape(1+inset,mp+f)+landscape(1+inset+f,mp)+landscape(1+inset,mp-f))/3;
+    landscape(1+inset,mp) = eavg + delta*randn;
+end
+
+landscape = flipud(landscape); %flip up down to make the last column the first row 
+
+points = find(landscape(1+inset,:));
+for y = 1:length(points)-1;
+    mp = (points(y)+points(y+1))/2;
+    eavg = (landscape(1+inset-f,mp)+landscape(1+inset,mp+f)+landscape(1+inset+f,mp)+landscape(1+inset,mp-f))/3;
+    landscape(1+inset,mp) = eavg + delta*randn;
+end
+
+landscape = flipud(landscape); 
+landscape = transpose(landscape); %return to original position
+
+%do random additions
+if sa == 1;
+for i = 1:length(find(landscape));
+    totpnts = find(landscape);
+    landscape(totpnts(i)) = landscape(totpnts(i))+delta*randn;
+end
+end
+
+index = n; %do this for all the levels until the landscape is finished
+
+end
+
+%trim off the borders:
+landscape = landscape(1+inset:rows-inset,1+inset:cols-inset);
+
+if norm == 1;
+%modify sensu Palmer:
+%ARGH!!!  YOU WERE NORMALIZING FUNNY! 
+%FUCKING. MATLAB.
+A = reshape(landscape,numel(landscape),1);
+A = zscore(A); %standardize for mean = 0 and unit SD
+A = sigma*A; %adjust for SD = sigma
+
+%now you have to put this back into matrix form
+normedsd = reshape(A,[dim,dim]);
+else
+    normedsd = landscape;
+end
+entries = (dim^2)-1; %entries minus the first one
+output = sum(1:1:entries); %this is the number of values you'll get depending on the size of the landscape
+
+h = zeros(1,output); %the vector for distances
+sqrs = zeros(1,output); %the vector for (z2-z1)^2
+
+for e = 1:entries
+    %get the x,y coordinates of the current point:
+            [normedsd(e),e];
+            [x,y]=ind2sub(size(normedsd),e);
+    if(e == 1);
+        for next = (e+1):(dim^2)
+            %get the coordinates of the other point
+            [normedsd(next),next]; 
+            [a,b]=ind2sub(size(normedsd),next);
+            h(1,(next-e)) = sqrt(((x-a)^2)+((y-b)^2)); %Euclidean distance
+            sqrs(1,(next-e)) = (normedsd(next)-normedsd(e))^2; %the difference between the two points, squared
+        end
+        add = (dim^2)-e; %this is a recursive indexing variable that gets larger in order to place all
+                         %calculations into one vector.
+    else
+        for next = (e+1):(dim^2) %repeat for all other e
+            [normedsd(next),next]; 
+            [a,b]=ind2sub(size(normedsd),next);
+            h(1,(next-e+add)) = sqrt(((x-a)^2)+((y-b)^2));
+            sqrs(1,(next-e+add)) = (normedsd(next)-normedsd(e))^2;
+        end
+        add = next-e+add; %the same recursive indexing variable.
+    end
+end
+
+%get the semivariogram:
+uniq = unique(h); %all the unique distances 
+uniq = uniq(find(uniq<(max(h)/2))); %use only those h < D/2
+semivar = zeros(1,length(uniq));
+for u = 1:length(uniq)
+    f = find(h == uniq(u));%find the position of all the entries equal to that particular distance
+    if length(f) > 30; %this is one of the criteria for calculating a useful semivariogram via 
+    spec.sqrs = zeros(1,length(f));
+    for v = 1:length(f)
+        spec.sqrs(1,v) = sqrs(f(v)); %pull all the sqrs values that correspond to that distance
+    end
+    semivar(1,u) = (1/(2*length(f)))*sum(spec.sqrs); %calculate the semivariance via eq. (3) in Burroughs, but
+                                                     %check the denominator, I think this is OK though. 
+    else
+        semivar(1,u) = NaN; %put NaN in for non-useful entries as a placeholder.
+    end
+end
+
+%get the slope:
+slope = regress(log(semivar'),[log(uniq') ones(size(uniq'))]);
+
+fractalD(1,z) = 3-(slope(1)/2);
+
+filename = [ 'landscapesD2_1' num2str(z) '.mat' ];
+        save(filename);
+end
