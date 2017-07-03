@@ -1,0 +1,711 @@
+%SIMULATION 8: SAME AS 7, but I'm going to start to write in loops to do the long simulations 
+%(for real this time), and I want to include code for some of the output figures.
+
+%ISSUES: white to black is not necessarily equal...and messing around with
+%rare/common habitat is a thing. (??)
+
+%GENERAL LANDSCAPE PARAMETERS:
+
+%eventually when you look at the effect of spatial autocorrelation and standard deviation
+%in conjunction with community response patterns, and at that point you'll
+%loop through D and sd to see what about these results depend on those spatial characteristics.
+%At this point in time, just reserve the loop for initial
+%conditions and different community responses.  \
+
+D = '2_5'; %change according to folder
+thesds = (.5:.5:2.5); 
+%replace with a loop later:
+lssim = 1; %the niche similarity landscape according to ls_mean_var_correlation
+lsdiff = 6; %the niche differentiation landscape according to ls_mean_var_correlation
+s=5;
+%l = (1:1:10); %the number of landscapes with D = whatever D folder we're in
+
+load(['landscapesD' num2str(D) num2str(lssim) '.mat']) %loads the landscape
+sigma = thesds(s); %determine what SD to adjust to
+factor = sigma/.5; %what sigma do you want to adjust for in the image? THIS IS NOT HOW PALMER DOES IT
+A = factor*normedsd; %get the right SD
+     
+load(['landscapesD' num2str(D) num2str(lsdiff) '.mat']) %loads the landscape
+sigma = thesds(s); %determine what SD to adjust to
+factor = sigma/.5; %what sigma do you want to adjust for in the image? THIS IS NOT HOW PALMER DOES IT
+B = factor*normedsd; %get the right SD
+
+dimension = size(normedsd);
+dim = dimension(1); %get the dimensions of the landscape
+
+%OTHER PARAMETERS
+
+initcond = 10;
+
+%SPECIES PARAMETERS:
+
+maxsp = 10; %max # sps on the landscape
+%wtf is up with these Ms.
+Mannual = 14;
+Mperrenial = 4;%max # of offspring in the VR; constand, variable, or stochastic?
+Ma = Mannual+1; %this is to account for using floor in the VR simulation...???
+Mp = Mperrenial+1;
+
+alpha = 2; %the competition parameter
+beta = 1; %the germination competition parameter, hopefully this makes it come out as a straight 0-1 probability
+sigsq = .5; %is habitat breadth constant, variable, or stochastic?
+prop = .4; %when k < 2 you have to use prop = .2 to get one individual to stay in the microsite. 
+modalsdiff = (-4.5:1:4.5);
+modalssim = repelem(4.5,maxsp); %HOW SHOULD I CHOOSE THIS PEAK?
+micro = 100; %how many microsites do you want to allow (hopefully I won't need more than 100).
+generations = 50;    
+annuals = [1,3,5,7,9];
+perrenials = [2,4,6,8,10];
+mort = 1/4;
+k = 3; %carrying capacity of the microsite
+
+%SPECIFIC LANDSCAPES:
+
+totalinds = zeros(generations,maxsp,initcond); %you have to make this an empty matrix and make rows the sd.
+divisibles = zeros(1,dim);
+    for K=1:dim;
+    divisibles(K) = rem(dim,K);
+    end
+    scale = find(divisibles == 0);
+    scale = scale(2:length(scale)-1);
+Cabund = cell(maxsp,length(scale),initcond); %columns are different grid sizes, rows are species 1:10.
+%removed an empty Crich matrix, hope that doesn't hopelessly fuck shit up.
+
+%for ls = 1:maxsp
+%load(['landscapesD' num2str(D) num2str(l(ls)) '.mat']) %loads the landscape
+%dimension = size(normedsd);
+%dim = dimension(1); %get the dimensions of the landscape
+
+Ntot = dim^2; %define how many individuals total to start with (this will fill half the landscape bc microsites).
+NI = repmat(floor(Ntot/maxsp),1,maxsp); %this splits up the total evenly among all species.
+
+%NOTE you used floor so the total number individuals isn't actually going to be Ntot
+
+    %for s = 1:length(thesds) %this is the secondary loop, which cycles through each SD for each
+                             % landscape of specified D, for a total of 50 landscapes
+                             %(10 sets of 5).
+    
+    %landscapes start with SD = .5, so here's how to adjust:
+    %sigma = thesds(s); %determine what SD to adjust to
+    %factor = sigma/.5; %what sigma do you want to adjust for in the image? THIS IS NOT HOW PALMER DOES IT
+    %A = factor*normedsd; %get the right SD
+    
+    %now you need to make another landscape and call it B.
+       
+    %B = factor*normedsd; %get the right SD
+%replicate initial conditions:
+for ic = 1:initcond
+%STEP 1: RANDOM PLACEMENT
+tempind = zeros(dim,dim,micro,maxsp); %ok hopefully we'll never exceed 
+                                         %100 species in a microsite before competition,
+                                         %but if you get an error about
+                                         %matrix dimensions, this is
+                                         %probably it.
+for n = 1:length(NI); %do for each species
+    for i = 1:NI(n); %do for each individual
+        a = 1;
+        b = dim+1;%(you have to do +1 with floor)
+        r = floor((b-a).*rand(1,2)+a); %draw a random location
+        occupado = sum(sum(sum(sum(tempind(r(1),r(2),:,:))))); %occupado = the occupancy of that 
+                                                                   %x,y coord across all species and 
+                                                                   %microsites instead of drawing again,
+                                                                   %you should just put species where 
+                                                                   %they go, and then do the competition 
+                                                                   %phase.                                                                            
+        tempind(r(1),r(2),occupado+1,n) = 1; %. . . put it in the next available microsite
+    end
+end
+            
+%STEP 2: INITIAL COMPETITION
+%identify microsites where there are more than k individuals
+
+oldind = zeros(dim,dim,micro,maxsp);
+
+total = zeros(dim,dim);
+for x = 1:dim
+    for y = 1:dim
+        total(x,y) = size(find(tempind(x,y,:,:)),1);
+    end
+end
+%now you have a matrix telling you how many individuals are in each
+%microsite
+overk = find(total>k);%gives you the indices to these microsites that have occupancy > k
+for comp = 1:length(overk)%do this microsite by microsite
+    %get the x,y coordinate for the overk(comp) you're on.
+    getdim = size(tempind);
+    [x,y]=ind2sub(getdim(1:2),overk(comp));
+    
+    remove = total(overk(comp)) - k; %find out how many plants have to die (remove) 
+    for howmanytimes = 1:remove; %how many rounds of "who dies" are we playing?
+            %first, find the number of each species in the microsite
+            numindsps = zeros(1,10);
+            for inds = 1:maxsp;
+                numindsps(1,inds) = sum(tempind(x,y,:,inds));
+            end
+            %numinds tells you how many individuals of sps 1:10 there are
+            whichsps = find(numindsps);
+            %next, find the R(x,y) of each species
+            rbysps = zeros(1,length(whichsps));
+            for bysps = 1:length(whichsps);
+                rbysps(1,bysps) = exp((-.5)*(B(x,y)-modalsdiff(whichsps(bysps)))^2/(sigsq));%this is the full 
+                                                                                              %r with alph . . .
+            end
+            probabilities = zeros(1,length(whichsps));
+            for j = 1:length(whichsps); %change j
+                compeffect = zeros(1,length(whichsps));
+                for m = 1:length(whichsps); 
+                    if j == m
+                        compeffect(m) = 0;
+                    else                         
+                    compeffect(m) = rbysps(m)*alpha*numindsps(whichsps(m));   %and then alpha again
+                    end
+                end
+             probabilities(j) = numindsps(whichsps(j))*(numindsps(whichsps(j))+sum(compeffect));
+            end
+            %normalize so that all values sum to 1:
+            normedprob = zeros(1,length(probabilities));
+            for normalize = 1:length(probabilities);
+            normedprob(1,normalize)=probabilities(normalize)/sum(probabilities);
+            end
+            %now that you have normalized probabilities, you just have to
+            %randomly draw who dies based on these probabilities.
+            %annotate out if you don't want it to be random and just use
+            %the straight probabilities.
+            
+            helpfulmatrix = [whichsps',normedprob'];
+            fate = rand(1,1);
+            [Y,I] = sort(helpfulmatrix(:,2));
+            newmat = helpfulmatrix(I,:);%sorted by normedprob
+            previous = newmat(1,2);
+            column = zeros(1,(size(newmat,1)-1));
+            for stack = 1:(size(newmat,1)-1)
+                new = previous+newmat(1+stack,2);
+                column(1,stack) = new;
+                previous = new;
+            end
+            column = [newmat(1,2),column]';
+            if fate < column(1);
+                    index = find(tempind(x,y,:,newmat(1,1)));
+                    tempind(x,y,max(index),newmat(1,1))=0;
+            else 
+                for w = 1:(length(column)-1)
+                  if column(w) < fate && fate < column(w+1)
+                     index = find(tempind(x,y,:,newmat(w+1,1)));
+                     tempind(x,y,max(index),newmat(w+1,1))=0;
+                  end
+                end
+            end
+    end  
+
+    numindsps = zeros(1,10);
+    for inds = 1:maxsp;
+        numindsps(1,inds) = sum(tempind(x,y,:,inds));
+    end
+    whichsps = find(numindsps);
+      
+    for place = 1:length(whichsps) %...of each species
+        for place2 = 1:numindsps(whichsps(place))%do for each individual...
+            occupado = sum(sum(sum(sum(oldind(x,y,:,:)))));
+            oldind(x,y,occupado+1,whichsps(place))=1;
+        end
+    end
+end
+
+total = zeros(dim,dim);
+for x = 1:dim
+    for y = 1:dim
+        total(x,y) = size(find(oldind(x,y,:,:)),1);
+    end
+end
+
+%STEP 3: the big loop (germination, competition, reproduction, and dispersal) for gen generations
+
+for gen = 1:generations
+ if gen == 1
+     
+ %this is where you need to take a census
+
+ %total no. individuals on the landscape (by sps):
+ for species = 1:maxsp
+    totalinds(gen,species,ic) = sum(sum(sum(sum(oldind(:,:,:,species))))); %#annuals+perrenials before mortality
+ end    
+
+%REPRODUCTION
+
+%figure out whether to round up or down with the proportion added...
+seedind = zeros(dim,dim,micro,maxsp);  
+%go through each occupied microsite:
+occupied = find(total>0); %because you have your check calculating the new total from above.
+for o = 1:length(occupied); %do this microsite by microsite
+    %get the x,y coordinate for the occupied(o) you're on.
+    getdim = size(oldind);
+    [x,y]=ind2sub(getdim(1:2),occupied(o));
+    numindsps = zeros(1,10);
+        for inds = 1:maxsp;
+            numindsps(1,inds) = sum(oldind(x,y,:,inds));
+        end
+    whichsps = find(numindsps); %which sps are reproducing
+            
+    %calculate their ouput for VR
+    fecundity = zeros(1,length(whichsps)); %an empty matrix for # offspring by sps, NOT ACCOUNTING FOR NO INDS OF EACH SPS
+    leave = zeros(1,length(whichsps)); %for the next step keep track of how many offspring are dispersing
+    for p = 1:length(whichsps); %do for each species in microsite
+        %make an if loop here for annuals v. perrenials where the only
+        %difference is Ma or Mp
+        if mod(whichsps(p),2) == 1 %if the species is odd, it's an annual
+        fecundity(1,p) = floor(Ma*exp(-.5*(A(x,y)-modalssim(whichsps(p)))^2/sigsq)); %using floor will you ever get 5?  I don't think so, so maybe set Mj = M+1
+        else
+        fecundity(1,p) = floor(Mp*exp(-.5*(A(x,y)-modalssim(whichsps(p)))^2/sigsq)); %using floor will you ever get 5?  I don't think so, so maybe set Mj = M+1
+        end
+        stay = ceil(prop*fecundity(1,p))*numindsps(whichsps(p)); %calculate how many of the offspring are staying in the microsite
+                                                   %multiplied by how many YOU NEED TO CHANGE THIS TO FLOOR FOR k = 2!!!       
+        leave(1,p) = (fecundity(1,p)*numindsps(whichsps(p)))-stay; %MAKE SURE THESE SUM TO FECUNDITY!!!
+        for offs = 1:stay 
+            occupado = sum(sum(sum(sum(seedind(x,y,:,:)))));
+            seedind(x,y,occupado+1,whichsps(p))=1; %ok, so this basically adds an individual in the 
+                                                       %correct species at x,y according to the next index up 
+                                                       %from where other species are.
+        end
+        
+%DISPERSAL
+    if leave(p)>0 %doesn't specify species
+    todisperseto = ceil((9-1)*rand(1,leave(p))); %draws the number of which adjacent cells randomly
+    %the potential locations for dispersal need to be modified
+    %for corners and edges:
+    %corners
+    if x == 1 && y == 1; %you're in the upper left, and only cells 3 - 5 are available.
+        disperse = todisperseto(3<todisperseto & todisperseto<7);
+        elseif x == 1 && y == dim; %you're in the upper right
+            disperse = todisperseto(5<todisperseto);
+        elseif x == dim && y == 1 %you're in the lower left
+            disperse = todisperseto(1<todisperseto & todisperseto<5);
+        elseif x == dim && y == dim %you're in the lower right
+            disperse = todisperseto(todisperseto == 8 | todisperseto<3);
+    
+   %edges
+        elseif x == 1;
+            disperse = todisperseto(3<todisperseto);
+        elseif x == dim;
+            disperse = todisperseto(todisperseto == 8 | todisperseto<5);
+        elseif y == 1;
+            disperse = todisperseto(1<todisperseto & todisperseto<7);
+        elseif y == dim;
+            disperse = todisperseto(5<todisperseto & todisperseto<3);
+    else
+            disperse = todisperseto;
+    end
+                
+        
+    %now that we have modified dispersal corners we can update
+    %seedind: 
+    for d = 1:length(disperse);
+        if disperse(d) == 1;
+            occupado = sum(sum(sum(sum(seedind(x-1,y-1,:,:)))));
+            seedind(x-1,y-1,occupado+1,whichsps(p))=1;
+            elseif disperse(d) == 2;
+                occupado = sum(sum(sum(sum(seedind(x-1,y,:,:)))));
+                seedind(x-1,y,occupado+1,whichsps(p))=1;
+            elseif disperse(d) == 3;
+                occupado = sum(sum(sum(sum(seedind(x-1,y+1,:,:)))));
+                seedind(x-1,y+1,occupado+1,whichsps(p))=1;
+            elseif disperse(d) == 4;
+                occupado = sum(sum(sum(sum(seedind(x,y+1,:,:)))));
+                seedind(x,y+1,occupado+1,whichsps(p))=1;                    
+            elseif disperse(d) == 5;
+                occupado = sum(sum(sum(sum(seedind(x+1,y+1,:,:)))));
+                seedind(x+1,y+1,occupado+1,whichsps(p))=1;                    
+            elseif disperse(d) == 6;
+                occupado = sum(sum(sum(sum(seedind(x+1,y,:,:)))));
+                seedind(x+1,y,occupado+1,whichsps(p))=1;
+            elseif disperse(d) == 7;
+                occupado = sum(sum(sum(sum(seedind(x+1,y-1,:,:)))));
+                seedind(x+1,y-1,occupado+1,whichsps(p))=1;
+        else 
+                occupado = sum(sum(sum(sum(seedind(x,y-1,:,:)))));
+                seedind(x,y-1,occupado+1,whichsps(p))=1;
+        end
+    end        
+    end
+    end %here's where the p loop ends.
+end
+
+else %(i.e. gen ~= 1)
+
+%at the start of a new generation, you have two matrices: the newmatrix one 
+%which has adult perrenials that survived the year, and seedind which has 
+%the annual and perrenial seeds from the previous year.  Now you need to go
+%through each microsite with a seed (e.g. get totalseed and then do 
+%seedoccupied>0), and get germination probabilities and germination fates.
+
+%GERMINATION
+
+totalseed = zeros(dim,dim);
+for x = 1:dim
+    for y = 1:dim
+        totalseed(x,y) = size(find(seedind(x,y,:,:)),1);
+    end
+end
+%now you have a matrix telling you how many individuals are in each
+%microsite
+occupiedseeds = find(totalseed>0);%gives you the indices to these microsites that have seeds
+
+%save a version of newmatrix, you'll need it to do the beginning of the o
+%loop.  Call it...oldind so that you can do all the other old ind stuff
+%with it???  No call it something different for now you can always rename
+%it.
+
+germind = zeros(dim,dim,micro,maxsp);
+
+for o = 1:length(occupiedseeds)    
+    getdim = size(seedind);
+    [x,y]=ind2sub(getdim(1:2),occupiedseeds(o));
+    numindsps = zeros(1,10);
+        for inds = 1:maxsp;
+            numindsps(1,inds) = sum(seedind(x,y,:,inds));
+        end
+        %numinds tells you how many individuals of sps 1:10 there are
+        whichsps = find(numindsps);
+        %next, find the probability of germinating.
+        rbysps = zeros(1,length(whichsps));
+        for bysps = 1:length(whichsps);
+            rbysps(1,bysps) = beta*exp((-.5)*(B(x,y)-modalsdiff(whichsps(bysps)))^2/(sigsq));%this is the full 
+                                                                                              %r with alph . . .
+        end
+            %ok new deal -- get the germination probability.  If they
+            %germinate then they compete, and that's just the standard code
+            %getting us down to k.  Yay.
+        for bysps = 1:length(whichsps)                
+            germfate = rand(1,numindsps(whichsps(bysps)));
+            for germ = 1:length(germfate)
+                if germfate(germ) < rbysps(bysps) %if this is true, add an individual to germind
+                    occupado = sum(sum(sum(sum(germind(x,y,:,:)))));
+                    germind(x,y,occupado+1,whichsps(bysps))=1;
+                end
+            end
+        end
+end
+
+%at this point newmatrix is all the perennials from last year, germind is
+%that same matrix with the annual and perennial seeds that were able to
+%germinate (based on a probability calculated via environmental
+%conditions). now you need to run the competition code, but maybe only on
+%the new individuals?  Yes.  OK, so make germind an empty matrix, and then
+%those will be the new ones.  Then do a for loop going through occupied
+%sites (you'll have to look at newmatrix alone, germind alone, and both
+%together, to see how much competition there is.
+
+%COMPETITION
+
+newnewmatrix = newmatrix; %save a version, where newmatrix contains old perrenials and newnewmatrix 
+                          %contains anything that germinates and survives competition. 
+                          %newnewmatrix microsite occupancy should not
+                          %exceed k.  It could've just been called oldind
+                          %here instead of renaming at the end, but I'm too
+                          %tired to go through and change it by hand.
+
+totalgerm = zeros(dim,dim);
+        for x = 1:dim
+            for y = 1:dim
+            totalgerm(x,y) = size(find(germind(x,y,:,:)),1);
+            end
+        end
+occugerm = find(totalgerm>0);   
+
+%this is fucking up...at the end of this competition loop newnewmatrix shouldn't have any microsites>k
+
+for o = 1:length(occugerm) %do this microsite by microsite
+    getdim = [dim dim];
+    [x,y]=ind2sub(getdim,occugerm(o)); %get the x,y coords that have germinated seedlings
+    openspace = k-sum(sum(sum(sum(newmatrix(x,y,:,:))))); %calculate how many new plants can fit (0-k)
+    if openspace > 0 %if there's any space
+        %calculate the number of germinated seedlings and which species
+        %they are that could potentially go in that microsite
+        numindsps = zeros(1,10);
+            for inds = 1:maxsp;
+                numindsps(1,inds) = sum(germind(x,y,:,inds));
+            end
+        whichsps = find(numindsps);
+        if sum(sum(sum(sum(germind(x,y,:,:))))) <= openspace %and if there are more open spaces than 
+                                                             %germinated seedlings
+            %then all seedlings that germinate get to fill up the rest of the microsite:                                                 
+            for place = 1:length(whichsps) %...of each species
+                for place2 = 1:numindsps(whichsps(place))%do for each individual...
+                    occupado = sum(sum(sum(sum(newnewmatrix(x,y,:,:)))));
+                    newnewmatrix(x,y,occupado+1,whichsps(place))=1;
+                end
+            end
+        else%if there are more germinated seedlings than open spaces
+           if length(whichsps) == 1  %and if they're all the same species, 
+                                     %no need for competition, just fill
+                                     %the empty spaces.
+            for fill = 1:length(openspace)
+               occupado = sum(sum(sum(sum(newnewmatrix(x,y,:,:)))));
+               newnewmatrix(x,y,occupado+1,whichsps)=1;
+            end
+           else %if they're NOT all the same species, a competition loop will weed out the extras.
+                %this is tricky because this will be asymmetrical competition:
+                %adults have an effect on seedlings but seedlings don't
+                %have an effect on adults.
+           remove = sum(sum(sum(sum(germind(x,y,:,:)))))-openspace; %how many individuals need to be removed
+            for howmanytimes = 1:remove
+                %update        
+                allnumindsps = zeros(1,10); %since adults have a competitive 
+                                            %effect, get the TOTAL #
+                                            %individuals and what species
+                                            %they are in the microsite (so
+                                            %old perrenials and germinated
+                                            %seedlings).
+                for inds = 1:maxsp;
+                    allnumindsps(1,inds) = sum(germind(x,y,:,inds))+sum(newmatrix(x,y,:,inds));
+                end
+                allwhichsps = find(allnumindsps);
+                
+                    rbysps = zeros(1,length(allwhichsps)); %need the competitive effect of all species,
+                                                           %including adults
+                    for bysps = 1:length(allwhichsps);
+                        %I TOOK OUT ALPHA HERE, BC I THINK PALMER WAS JUST
+                        %BEING SLOPPY.
+                        rbysps(1,bysps) = exp((-.5)*(B(x,y)-modalsdiff(allwhichsps(bysps)))^2/(sigsq));
+                    end
+                    
+                    probabilities = zeros(1,length(whichsps));            
+                    for j = 1:length(whichsps); %calculate probability of dying only for germinating species
+                        compeffect = zeros(1,length(allwhichsps)); %but there's a compeffect of all species
+                            for m = 1:length(allwhichsps);
+                                if j == m
+                                    compeffect(m) = 0;
+                                else                         
+                                    compeffect(m) = rbysps(m)*alpha*allnumindsps(allwhichsps(m));
+                                end
+                            end
+                    %and finally, you need to include any adults of focal sps j, via allnumindsps(whichsps(j))        
+                    probabilities(j) = allnumindsps(whichsps(j))*(allnumindsps(whichsps(j))+sum(compeffect));
+                    end
+                    %normalize so that all values sum to 1:
+                    normedprob = zeros(1,length(probabilities));
+                    for normalize = 1:length(probabilities);
+                        normedprob(1,normalize)=probabilities(normalize)/sum(probabilities);
+                    end
+            
+                    helpfulmatrix = [whichsps',normedprob']; %get sps and their probability of dying
+                    fate = rand(1,1); %draw a no. to see who dies this round
+                    %the next chunk of code is the column method, seeing
+                    %where the number drawn ends up
+                    [Y,I] = sort(helpfulmatrix(:,2));
+                    newmat = helpfulmatrix(I,:);%sorted by normedprob
+                    previous = newmat(1,2);
+                    column = zeros(1,(size(newmat,1)-1));
+                    for stack = 1:(size(newmat,1)-1)
+                        new = previous+newmat(1+stack,2);
+                        column(1,stack) = new;
+                        previous = new;
+                    end
+                    column = [newmat(1,2),column]';
+                    %this if loop removes the correct individual
+                    if fate < column(1);
+                        index = find(germind(x,y,:,newmat(1,1)));
+                        germind(x,y,max(index),newmat(1,1))=0;
+                    else 
+                     for w = 1:(length(column)-1)
+                        if column(w) < fate && fate < column(w+1)
+                            index = find(germind(x,y,:,newmat(w+1,1)));
+                            germind(x,y,max(index),newmat(w+1,1))=0;
+                        end
+                     end
+                    end
+                %update the germinated matrix (the adult matrix obviously
+                %remains unchanged, but all~ is recalculated at the beginning
+                %of the next loop with this updated germind)
+                numindsps = zeros(1,10);
+                for inds = 1:maxsp;
+                    numindsps(1,inds) = sum(germind(x,y,:,inds));
+                end
+                whichsps = find(numindsps);
+            end
+            %at this point you've gone through rem times, weeding out
+            %individuals until there are only enough left to fill empty
+            %spaces.  Put these individuals into newnewmatrix
+            for place = 1:length(whichsps) %...of each species
+                for place2 = 1:numindsps(whichsps(place))%do for each individual...
+                    occupado = sum(sum(sum(sum(newnewmatrix(x,y,:,:)))));
+                    newnewmatrix(x,y,occupado+1,whichsps(place))=1;
+                end
+            end
+           end
+        end
+    end
+end
+
+oldind = newnewmatrix;
+
+%this is where you need to take a census
+
+%total no. individuals on the landscape (by sps):
+for species = 1:maxsp
+    totalinds(gen,species,ic) = sum(sum(sum(sum(oldind(:,:,:,species))))); %#annuals+perrenials before mortality
+end
+
+if gen == generations
+    for eachsp = 1:maxsp
+        for z = 1:length(scale)
+            numgrid = dim/scale(z);
+            recordS = zeros(numgrid,numgrid);
+            indexv = 0;
+            for v = 1:numgrid
+                indexw = 0;
+                for w = 1:numgrid
+                    recordS(v,w) = sum(sum(sum(sum(oldind((indexv+1):((indexv)+scale(z)),(indexw+1):(w*scale(z)),:,eachsp)))));
+                    indexw = (w*scale(z));
+                end
+                indexv = (v*scale(z));
+            end
+            Cabund{eachsp,z,ic} = recordS;
+        end
+    end
+end
+
+%REPRODUCTION
+
+%figure out whether to round up or down with the proportion added...
+seedind = zeros(dim,dim,micro,maxsp);  
+%go through each occupied microsite:
+occupied = find(total>0); %because you have your check calculating the new total from above.
+for o = 1:length(occupied); %do this microsite by microsite
+    %get the x,y coordinate for the occupied(o) you're on.
+    getdim = size(oldind);
+    [x,y]=ind2sub(getdim(1:2),occupied(o));
+    numindsps = zeros(1,10);
+        for inds = 1:maxsp;
+            numindsps(1,inds) = sum(oldind(x,y,:,inds));
+        end
+    whichsps = find(numindsps); %which sps are reproducing
+            
+    %calculate their ouput for VR
+    fecundity = zeros(1,length(whichsps)); %an empty matrix for # offspring by sps, NOT ACCOUNTING FOR NO INDS OF EACH SPS
+    leave = zeros(1,length(whichsps)); %for the next step keep track of how many offspring are dispersing
+    for p = 1:length(whichsps); %do for each species in microsite
+        %make an if loop here for annuals v. perrenials where the only
+        %difference is Ma or Mp
+        if mod(whichsps(p),2) == 1 %if the species is odd, it's an annual
+        fecundity(1,p) = floor(Ma*exp(-.5*(A(x,y)-modalssim(whichsps(p)))^2/sigsq)); %using floor will you ever get 5?  I don't think so, so maybe set Mj = M+1
+        else
+        fecundity(1,p) = floor(Mp*exp(-.5*(A(x,y)-modalssim(whichsps(p)))^2/sigsq)); %using floor will you ever get 5?  I don't think so, so maybe set Mj = M+1
+        end
+        stay = ceil(prop*fecundity(1,p))*numindsps(whichsps(p)); %calculate how many of the offspring are staying in the microsite
+                                                   %multiplied by how many YOU NEED TO CHANGE THIS TO FLOOR FOR k = 2!!!       
+        leave(1,p) = (fecundity(1,p)*numindsps(whichsps(p)))-stay; %MAKE SURE THESE SUM TO FECUNDITY!!!
+        for offs = 1:stay 
+            occupado = sum(sum(sum(sum(seedind(x,y,:,:)))));
+            seedind(x,y,occupado+1,whichsps(p))=1; %ok, so this basically adds an individual in the 
+                                                       %correct species at x,y according to the next index up 
+                                                       %from where other species are.
+        end
+        
+%DISPERSAL
+    if leave(p)>0 %doesn't specify species
+    todisperseto = ceil((9-1)*rand(1,leave(p))); %draws the number of which adjacent cells randomly
+    %the potential locations for dispersal need to be modified
+    %for corners and edges:
+    %corners
+    if x == 1 && y == 1; %you're in the upper left, and only cells 3 - 5 are available.
+        disperse = todisperseto(3<todisperseto & todisperseto<7);
+        elseif x == 1 && y == dim; %you're in the upper right
+            disperse = todisperseto(5<todisperseto);
+        elseif x == dim && y == 1 %you're in the lower left
+            disperse = todisperseto(1<todisperseto & todisperseto<5);
+        elseif x == dim && y == dim %you're in the lower right
+            disperse = todisperseto(todisperseto == 8 | todisperseto<3);
+    
+   %edges
+        elseif x == 1;
+            disperse = todisperseto(3<todisperseto);
+        elseif x == dim;
+            disperse = todisperseto(todisperseto == 8 | todisperseto<5);
+        elseif y == 1;
+            disperse = todisperseto(1<todisperseto & todisperseto<7);
+        elseif y == dim;
+            disperse = todisperseto(5<todisperseto & todisperseto<3);
+    else
+            disperse = todisperseto;
+    end
+                
+        
+    %now that we have modified dispersal corners we can update
+    %seedind: 
+    for d = 1:length(disperse);
+        if disperse(d) == 1;
+            occupado = sum(sum(sum(sum(seedind(x-1,y-1,:,:)))));
+            seedind(x-1,y-1,occupado+1,whichsps(p))=1;
+            elseif disperse(d) == 2;
+                occupado = sum(sum(sum(sum(seedind(x-1,y,:,:)))));
+                seedind(x-1,y,occupado+1,whichsps(p))=1;
+            elseif disperse(d) == 3;
+                occupado = sum(sum(sum(sum(seedind(x-1,y+1,:,:)))));
+                seedind(x-1,y+1,occupado+1,whichsps(p))=1;
+            elseif disperse(d) == 4;
+                occupado = sum(sum(sum(sum(seedind(x,y+1,:,:)))));
+                seedind(x,y+1,occupado+1,whichsps(p))=1;                    
+            elseif disperse(d) == 5;
+                occupado = sum(sum(sum(sum(seedind(x+1,y+1,:,:)))));
+                seedind(x+1,y+1,occupado+1,whichsps(p))=1;                    
+            elseif disperse(d) == 6;
+                occupado = sum(sum(sum(sum(seedind(x+1,y,:,:)))));
+                seedind(x+1,y,occupado+1,whichsps(p))=1;
+            elseif disperse(d) == 7;
+                occupado = sum(sum(sum(sum(seedind(x+1,y-1,:,:)))));
+                seedind(x+1,y-1,occupado+1,whichsps(p))=1;
+        else 
+                occupado = sum(sum(sum(sum(seedind(x,y-1,:,:)))));
+                seedind(x,y-1,occupado+1,whichsps(p))=1;
+        end
+    end        
+    end
+    end
+end
+ end
+
+
+%MORTALITY
+    %now you need to get final ind, which for annuals means you subtract off 100% of old individuals
+    %and for perrenials, you subtract of mort of old individuals.
+    
+    %in sim4 I need to do this on the oldind matrix, so that I know where
+    %all the empty spots are going into the next generation.  I think this
+    %will actually end up being easier.
+    
+   newmatrix = zeros(dim,dim,micro,maxsp);
+    
+   %annuals: they all die, so it'll be all 0s anyway
+    
+   %perrenials:
+   
+   %next, a loop through each species
+    for sps = 1:length(perrenials)
+        
+        totalperold = zeros(dim,dim);
+        for x = 1:dim
+           for y = 1:dim
+            totalperold(x,y) = size(find(oldind(x,y,:,perrenials(sps))),1);
+           end
+        end
+        occupiedold = find(totalperold>0);
+        
+            for o = 1:length(occupiedold); %do this microsite by microsite
+                %get the x,y coordinate for the occupied(o) you're on.
+                getdim = size(oldind);
+                [x,y]=ind2sub(getdim(1:2),occupiedold(o));
+                
+                numold = sum(sum(sum(sum(oldind(x,y,:,perrenials(sps)))))); %how many old individuals are there
+                liveordie = rand(1,numold); %draw a random number for each of these to see if they live or die
+                    for decide = 1:length(liveordie) %go through each of these individuals
+                        if liveordie(decide) > mort %if they draw a lucky number, they survive to the next gen
+                            occupado = sum(sum(sum(sum(newmatrix(x,y,:,:)))));
+                            newmatrix(x,y,occupado+1,perrenials(sps)) = 1;
+                        end
+                    end
+            end
+    end
+    %you still sometimes get at 'index exceeds dimensions error, 
+    %which probably means you're exceeding microsites somehow?  Impossible...??
+end
+end
